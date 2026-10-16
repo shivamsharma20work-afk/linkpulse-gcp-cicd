@@ -1,0 +1,32 @@
+[project]
+name = "linkpulse"
+version = "0.1.0"
+description = "LinkPulse - URL shortener with click analytics, deployed on GCP Cloud Run via Cloud Build + Terraform"
+authors = [
+    { name = "shivam sharma", email = "shivam.sharma@innobles.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.0",
+    "google-cloud-firestore>=2.34.1",
+    "pydantic-settings>=2.15.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

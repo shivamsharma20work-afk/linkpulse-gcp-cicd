@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LinkPulse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0b14; --card: rgba(255,255,255,.05); --line: rgba(255,255,255,.1);
+    --text: #f3f1ff; --muted: #9a97b5; --a: #7c5cff; --b: #ff5ca8; --c: #2ee6a6;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: "Space Grotesk", system-ui, sans-serif; color: var(--text);
+    background: var(--bg); min-height: 100vh; overflow-x: hidden;
+    display: flex; flex-direction: column; align-items: center; padding: 64px 16px 40px;
+  }
+  .blob { position: fixed; border-radius: 50%; filter: blur(90px); opacity: .45; z-index: -1; animation: float 14s ease-in-out infinite; }
+  .blob.one { width: 420px; height: 420px; background: var(--a); top: -120px; left: -100px; }
+  .blob.two { width: 360px; height: 360px; background: var(--b); bottom: -120px; right: -80px; animation-delay: -7s; }
+  @keyframes float { 50% { transform: translate(40px, 30px) scale(1.1); } }
+
+  h1 { font-size: clamp(2.6rem, 7vw, 4.2rem); letter-spacing: -.04em; line-height: 1; }
+  h1 span { background: linear-gradient(90deg, var(--a), var(--b)); -webkit-background-clip: text; color: transparent; }
+  .pulse { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: var(--c); margin-left: 10px; vertical-align: middle; box-shadow: 0 0 0 0 var(--c); animation: ping 1.8s infinite; }
+  @keyframes ping { 70% { box-shadow: 0 0 0 16px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+  .tag { color: var(--muted); margin: 14px 0 36px; font-size: 1.1rem; text-align: center; }
+
+  .card { width: 100%; max-width: 620px; background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; backdrop-filter: blur(14px); }
+  form { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+  input { font: inherit; color: var(--text); background: rgba(0,0,0,.3); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; outline: none; transition: border-color .2s; min-width: 0; }
+  input:focus { border-color: var(--a); }
+  #alias { grid-column: 1 / -1; font-size: .95rem; }
+  button { font: inherit; font-weight: 700; color: white; border: 0; border-radius: 14px; padding: 0 26px; cursor: pointer; background: linear-gradient(135deg, var(--a), var(--b)); transition: transform .15s; }
+  button:hover { transform: translateY(-2px) rotate(-1deg); }
+  button:active { transform: scale(.96); }
+
+  .result { margin-top: 16px; padding: 14px 16px; border-radius: 14px; background: rgba(46,230,166,.1); border: 1px dashed var(--c); display: none; align-items: center; justify-content: space-between; gap: 10px; animation: pop .35s cubic-bezier(.3,1.6,.6,1); }
+  .result.show { display: flex; }
+  .result.err { background: rgba(255,92,168,.1); border-color: var(--b); }
+  @keyframes pop { from { transform: scale(.9); opacity: 0; } }
+  .mono { font-family: "JetBrains Mono", monospace; font-size: .92rem; word-break: break-all; }
+  .copy { padding: 8px 14px; font-size: .85rem; background: var(--c); color: #04150e; }
+
+  h2 { font-size: 1rem; color: var(--muted); font-weight: 500; margin: 34px 0 12px; width: 100%; max-width: 620px; }
+  ul { list-style: none; padding: 0; width: 100%; max-width: 620px; display: grid; gap: 8px; }
+  li { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+  li .dest { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  li a { color: var(--text); text-decoration: none; }
+  .clicks { font-weight: 700; color: var(--c); white-space: nowrap; }
+  .empty { color: var(--muted); text-align: center; padding: 18px; }
+
+  footer { margin-top: auto; padding-top: 40px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .chip { font-family: "JetBrains Mono", monospace; font-size: .75rem; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .chip b { color: var(--text); font-weight: 500; }
+</style>
+</head>
+<body>
+  <div class="blob one"></div><div class="blob two"></div>
+
+  <h1>Link<span>Pulse</span><i class="pulse"></i></h1>
+  <p class="tag">Long URLs ko chhota karo. Har click ki dhadkan count karo.</p>
+
+  <div class="card">
+    <form id="f">
+      <input id="url" type="url" placeholder="https://kuch-bahut-lamba-sa-link.com/..." required>
+      <button>Shorten ✦</button>
+      <input id="alias" placeholder="custom alias (optional) — e.g. my-resume">
+    </form>
+    <div class="result" id="res"></div>
+  </div>
+
+  <h2>Recent links</h2>
+  <ul id="list"><li class="empty">Abhi koi link nahi hai. Pehla link bana do 🚀</li></ul>
+
+  <footer id="meta"></footer>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  const short = (code) => `${location.origin}/${code}`;
+
+  async function loadLinks() {
+    const links = await fetch("/api/links").then((r) => r.json());
+    if (!links.length) return;
+    $("list").innerHTML = links.map((l) => `
+      <li>
+        <a class="mono" href="/${esc(l.code)}" target="_blank">/${esc(l.code)}</a>
+        <span class="dest">${esc(l.url)}</span>
+        <span class="clicks">${l.clicks} ⚡</span>
+      </li>`).join("");
+  }
+
+  $("f").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const res = $("res");
+    const r = await fetch("/api/links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: $("url").value, alias: $("alias").value || null }),
+    });
+    const data = await r.json();
+    res.className = "result show" + (r.ok ? "" : " err");
+    if (!r.ok) {
+      const msg = typeof data.detail === "string" ? data.detail : "Alias mein sirf a-z, 0-9, - aur _ (3-32 chars)";
+      res.innerHTML = `<span>😬 ${esc(msg)}</span>`;
+      return;
+    }
+    res.innerHTML = `<span class="mono">${esc(short(data.code))}</span><button class="copy" type="button">Copy</button>`;
+    res.querySelector(".copy").onclick = (ev) => {
+      navigator.clipboard.writeText(short(data.code));
+      ev.target.textContent = "Copied ✓";
+    };
+    $("f").reset();
+    loadLinks();
+  });
+
+  fetch("/api/info").then((r) => r.json()).then((i) => {
+    $("meta").innerHTML = ["environment", "version", "storage"]
+      .map((k) => `<span class="chip">${k} <b>${esc(String(i[k]))}</b></span>`).join("");
+  });
+  loadLinks();
+  setInterval(loadLinks, 5000);
+</script>
+</body>
+</html>

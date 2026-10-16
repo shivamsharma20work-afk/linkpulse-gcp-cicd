@@ -1,0 +1,95 @@
+# LinkPulse CI/CD pipeline (Cloud Build)
+#
+#   test + lint -> build image -> Trivy scan -> push
+#   -> deploy staging -> smoke test staging
+#   -> canary to prod (10% traffic) -> health check -> promote to 100%
+#   -> on any prod failure: automatic rollback to the previous revision
+#
+# Trigger: push to `main` (see terraform/cicd.tf).
+
+substitutions:
+  _REGION: asia-south1
+  _APP: linkpulse
+  _CANARY_PERCENT: "10"
+  _CANARY_SECONDS: "120"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
+
+steps:
+  # ---- 1. Quality gates ------------------------------------------------------
+  - id: test
+    name: ghcr.io/astral-sh/uv:0.12.23-python3.12-bookworm-slim
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        uv sync --frozen
+        uv run ruff check .
+        uv run ruff format --check .
+        uv run pytest -q
+
+  # ---- 2. Build --------------------------------------------------------------
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP}/app:$SHORT_SHA
+      - .
+
+  # ---- 3. Security scan: fail on HIGH/CRITICAL fixable CVEs -----------------
+  - id: trivy
+    name: aquasec/trivy:0.58.1
+    args:
+      - image
+      - --exit-code=1
+      - --severity=HIGH,CRITICAL
+      - --ignore-unfixed
+      - --no-progress
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP}/app:$SHORT_SHA
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP}/app:$SHORT_SHA"]
+
+  # ---- 4. Staging ------------------------------------------------------------
+  - id: deploy-staging
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_APP}-staging
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP}/app:$SHORT_SHA
+      - --region=${_REGION}
+      - --update-env-vars=APP_VERSION=$SHORT_SHA
+      - --labels=commit-sha=$SHORT_SHA
+
+  - id: smoke-staging
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        URL=$(gcloud run services describe ${_APP}-staging --region=${_REGION} --format='value(status.url)')
+        ./scripts/smoke_test.sh "$$URL" "$SHORT_SHA"
+
+  # ---- 5. Prod: canary with automatic rollback -------------------------------
+  - id: canary-prod
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    env:
+      - SERVICE=${_APP}-prod
+      - REGION=${_REGION}
+      - IMAGE=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP}/app:$SHORT_SHA
+      - VERSION=$SHORT_SHA
+      - CANARY_PERCENT=${_CANARY_PERCENT}
+      - CANARY_SECONDS=${_CANARY_SECONDS}
+    args: [./scripts/canary_deploy.sh]
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_APP}/app:$SHORT_SHA
+
+timeout: 1800s
